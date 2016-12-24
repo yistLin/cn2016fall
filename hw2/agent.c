@@ -12,7 +12,8 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
-    int sockfd;
+    int sockfd, ret;
+    char* my_addr = argv[1];
     int port_no = atoi(argv[2]);
     struct sockaddr_in agent;
 
@@ -26,7 +27,11 @@ int main(int argc, char* argv[]) {
     memset((char*)&agent, 0, sizeof(agent));
     agent.sin_family = AF_INET;
     agent.sin_port = htons(port_no);
-    agent.sin_addr.s_addr = htonl(INADDR_ANY);
+
+	if ((ret = inet_pton(AF_INET, my_addr, &agent.sin_addr)) <= 0) {
+		fprintf(stderr, "inet_pton() error, ret = %d\n", ret);
+		exit(1);
+	}
 
     // bind socket with address struct
     if (bind(sockfd, (struct sockaddr*)&agent, sizeof(agent)) == -1) {

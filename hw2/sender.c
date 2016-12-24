@@ -13,7 +13,7 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
-    char* server_addr = argv[1];
+    char* my_addr = argv[1];
     int port_no = atoi(argv[2]);
 
     int sockfd, nBytes, ret;
@@ -31,9 +31,9 @@ int main(int argc, char* argv[]) {
     memset((char*)&recv_addr, 0, sizeof(recv_addr));
 	recv_addr.sin_family = AF_INET;
 	recv_addr.sin_port = htons(port_no);
-	// recv_addr.sin_addr.s_addr = htonl(server_addr);
+	// recv_addr.sin_addr.s_addr = htonl(my_addr);
 
-	if ((ret = inet_pton(AF_INET, server_addr, &recv_addr.sin_addr)) <= 0) {
+	if ((ret = inet_pton(AF_INET, my_addr, &recv_addr.sin_addr)) <= 0) {
 		fprintf(stderr, "inet_pton() error, ret = %d\n", ret);
 		exit(1);
 	}
