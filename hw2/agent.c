@@ -41,8 +41,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Initialize size variable to be used later on
-    int nBytes;
-    char buffer[1024];
+    // char buffer[1024];
     struct sockaddr_in sender;
     socklen_t sendsize = sizeof(sender);
     memset((char*)&sender, 0, sizeof(sender));
@@ -51,11 +50,14 @@ int main(int argc, char* argv[]) {
     packet pkt;
 
     while (1) {
-        nBytes = recvfrom(sockfd, &pkt, sizeof(pkt), 0, (struct sockaddr*)&sender, &sendsize);
+        recvfrom(sockfd, &pkt, sizeof(pkt), 0, (struct sockaddr*)&sender, &sendsize);
 
-        printf("%d %d\n", pkt.port_no, pkt.seq_no);
+        printf("[agent] fwd %d %d\n", pkt.port_no, pkt.seq_no);
 
-        // sendto(sockfd, buffer, nBytes, 0, (struct sockaddr*)&sender, sendsize);
+        sender.sin_family = AF_INET;
+        sender.sin_port = htons(pkt.port_no);
+
+        sendto(sockfd, &pkt, sizeof(pkt), 0, (struct sockaddr*)&sender, sendsize);
     }
 
     return 0;

@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
 
     // sending packet to agent
     packet pkt;
-    pkt.port_no = my_port_no;
+    pkt.port_no = dest_port_no;
     pkt.seq_no = 1;
 
 	while(1) {
@@ -49,7 +49,7 @@ int main(int argc, char* argv[]) {
         // sprintf(buffer, "the %d-th package\n", ++cnt);
 		// nBytes = strlen(buffer) + 1;
 
-		sendto(sockfd, &pkt, sizeof(pkt)+1, 0, (struct sockaddr*)&agent_addr, sizeof(agent_addr));
+		sendto(sockfd, &pkt, sizeof(pkt), 0, (struct sockaddr*)&agent_addr, sizeof(agent_addr));
 
 		// nBytes = recvfrom(sockfd, buffer, 1024, 0, NULL, NULL);
 
