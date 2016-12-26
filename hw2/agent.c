@@ -6,15 +6,16 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include "packet.h"
+
 int main(int argc, char* argv[]) {
-    if (argc != 3) {
-        fprintf(stderr, "usage: ./agent [address] [port]\n");
+    if (argc != 2) {
+        fprintf(stderr, "usage: ./agent [port]\n");
         exit(1);
     }
 
     int sockfd, ret;
-    char* my_addr = argv[1];
-    int port_no = atoi(argv[2]);
+    int my_port_no = atoi(argv[1]);
     struct sockaddr_in agent;
 
     // Create UDP socket
@@ -26,9 +27,9 @@ int main(int argc, char* argv[]) {
     // configure settings in address struct
     memset((char*)&agent, 0, sizeof(agent));
     agent.sin_family = AF_INET;
-    agent.sin_port = htons(port_no);
+    agent.sin_port = htons(my_port_no);
 
-	if ((ret = inet_pton(AF_INET, my_addr, &agent.sin_addr)) <= 0) {
+	if ((ret = inet_pton(AF_INET, "127.0.0.1", &agent.sin_addr)) <= 0) {
 		fprintf(stderr, "inet_pton() error, ret = %d\n", ret);
 		exit(1);
 	}
@@ -46,12 +47,15 @@ int main(int argc, char* argv[]) {
     socklen_t sendsize = sizeof(sender);
     memset((char*)&sender, 0, sizeof(sender));
 
+    // receive a packet from sender
+    packet pkt;
+
     while (1) {
-        nBytes = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)&sender, &sendsize);
+        nBytes = recvfrom(sockfd, &pkt, sizeof(pkt), 0, (struct sockaddr*)&sender, &sendsize);
 
-        printf("%s", buffer);
+        printf("%d %d\n", pkt.port_no, pkt.seq_no);
 
-        sendto(sockfd, buffer, nBytes, 0, (struct sockaddr*)&sender, sendsize);
+        // sendto(sockfd, buffer, nBytes, 0, (struct sockaddr*)&sender, sendsize);
     }
 
     return 0;

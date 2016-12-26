@@ -7,19 +7,22 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include "packet.h"
+
 int main(int argc, char* argv[]) {
     if (argc != 4) {
-        fprintf(stderr, "usage: ./sender [address] [port] [file]\n");
+        fprintf(stderr, "usage: ./sender [my port] [agent port] [dest port]\n");
         exit(1);
     }
 
-    char* my_addr = argv[1];
-    int port_no = atoi(argv[2]);
+    int my_port_no = atoi(argv[1]);
+    int agent_port_no = atoi(argv[2]);
+    int dest_port_no = atoi(argv[3]);
 
     int sockfd, nBytes, ret;
 	char buffer[1024];
-	struct sockaddr_in recv_addr;
-	socklen_t addr_size;
+	struct sockaddr_in agent_addr;
+	// socklen_t addr_size;
 
 	// Create UDP socket
 	if ((sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
@@ -27,39 +30,32 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
-	// Configure settings in address struct
-    memset((char*)&recv_addr, 0, sizeof(recv_addr));
-	recv_addr.sin_family = AF_INET;
-	recv_addr.sin_port = htons(port_no);
-	// recv_addr.sin_addr.s_addr = htonl(my_addr);
-
-	if ((ret = inet_pton(AF_INET, my_addr, &recv_addr.sin_addr)) <= 0) {
+	// Configure settings to send to agent
+    memset((char*)&agent_addr, 0, sizeof(agent_addr));
+	agent_addr.sin_family = AF_INET;
+	agent_addr.sin_port = htons(agent_port_no);
+	if ((ret = inet_pton(AF_INET, "127.0.0.1", &agent_addr.sin_addr)) <= 0) {
 		fprintf(stderr, "inet_pton() error, ret = %d\n", ret);
 		exit(1);
 	}
 
-	// Initialize size variable to be used later on
-	addr_size = sizeof(recv_addr);
+    // sending packet to agent
+    packet pkt;
+    pkt.port_no = my_port_no;
+    pkt.seq_no = 1;
 
-    int cnt = 0;
 	while(1) {
-		// printf("Type a sentence to send to server:\n");
-		// fgets(buffer, 1024, stdin);
 
-        sprintf(buffer, "the %d-th package\n", ++cnt);
-		nBytes = strlen(buffer) + 1;
+        // sprintf(buffer, "the %d-th package\n", ++cnt);
+		// nBytes = strlen(buffer) + 1;
 
-        sleep(1);
+		sendto(sockfd, &pkt, sizeof(pkt)+1, 0, (struct sockaddr*)&agent_addr, sizeof(agent_addr));
 
-		// Send message to server
-		sendto(sockfd, buffer, nBytes, 0,\
-			(struct sockaddr*)&recv_addr, addr_size);
+		// nBytes = recvfrom(sockfd, buffer, 1024, 0, NULL, NULL);
 
-		// Receive message from server
-		nBytes = recvfrom(sockfd, buffer, 1024, 0,\
-			NULL, NULL);
+		// printf("Received from server: %s\n", buffer);
 
-		printf("Received from server: %s\n", buffer);
+        break;
 	}
 
     return 0;
