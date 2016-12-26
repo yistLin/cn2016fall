@@ -52,10 +52,10 @@ int main(int argc, char* argv[]) {
     while (1) {
         recvfrom(sockfd, &pkt, sizeof(pkt), 0, (struct sockaddr*)&sender, &sendsize);
 
-        printf("[agent] fwd %d %d\n", pkt.port_no, pkt.seq_no);
+        printf("[agent] fwd %d to %d\n", pkt.from_port_no, pkt.to_port_no);
 
         sender.sin_family = AF_INET;
-        sender.sin_port = htons(pkt.port_no);
+        sender.sin_port = htons(pkt.to_port_no);
 
         sendto(sockfd, &pkt, sizeof(pkt), 0, (struct sockaddr*)&sender, sendsize);
     }

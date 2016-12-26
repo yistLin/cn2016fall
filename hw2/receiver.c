@@ -13,12 +13,13 @@ void error(char* msg) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc != 2) {
-        fprintf(stderr, "usage: ./receiver [port]\n");
+    if (argc != 3) {
+        fprintf(stderr, "usage: ./receiver [port] [file]\n");
         exit(1);
     }
 
     int port_no = atoi(argv[1]);
+    char* filename = argv[2];
     int sockfd;
     struct sockaddr_in receiver;
 
@@ -39,21 +40,44 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
-    // Initialize size variable to be used later on
-    // char buffer[1024];
-    struct sockaddr_storage serverStorage;
-    socklen_t addr_size = sizeof(serverStorage);
+    // write to file
+    FILE* fp;
+    fp = fopen(filename, "wb");
+    if (fp == NULL) {
+        error("fail to open file");
+        exit(1);
+    }
 
-    packet pkt;
+    // Initialize size variable to be used later on
+    struct sockaddr_in agent;
+    socklen_t addr_size = sizeof(agent);
+
+    packet recv_pkt, ack_pkt;
+    memset(&recv_pkt, 0, sizeof(packet));
+    memset(&ack_pkt, 0, sizeof(packet));
 
     while (1) {
-        recvfrom(sockfd, &pkt, sizeof(packet), 0, (struct sockaddr*)&serverStorage, &addr_size);
+        recvfrom(sockfd, &recv_pkt, sizeof(packet), 0, (struct sockaddr*)&agent, &addr_size);
 
-        printf("[receiver] recv %d, %d\n", pkt.port_no, pkt.seq_no);
+        if (recv_pkt.is_FIN == 1) {
+            printf("[receiver] recv FIN\n");
+        }
+        else {
+            printf("[receiver] recv %d\n", recv_pkt.seq_no);
+            fwrite(recv_pkt.content, 1, recv_pkt.len, fp);
+        }
+        
+        ack_pkt.seq_no = recv_pkt.seq_no;
+        ack_pkt.from_port_no = port_no;
+        ack_pkt.to_port_no = recv_pkt.from_port_no;
+        ack_pkt.is_ACK = 1;
+        ack_pkt.is_FIN = recv_pkt.is_FIN;
+        sendto(sockfd, &ack_pkt, sizeof(ack_pkt), 0, (struct sockaddr*)&agent, addr_size);
 
-        // sendto(sockfd, buffer, nBytes, 0, (struct sockaddr*)&serverStorage, addr_size);
-        break;
+        if (recv_pkt.is_FIN == 1) break;
     }
+
+    fclose(fp);
 
     return 0;
 }
