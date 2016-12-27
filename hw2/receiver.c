@@ -57,14 +57,15 @@ int main(int argc, char* argv[]) {
     memset(&ack_pkt, 0, sizeof(packet));
 
     while (1) {
-        recvfrom(sockfd, &recv_pkt, sizeof(packet), 0, (struct sockaddr*)&agent, &addr_size);
+        recvfrom(sockfd, &recv_pkt, sizeof(packet), 0,\
+            (struct sockaddr*)&agent, &addr_size);
 
         if (recv_pkt.is_FIN == 1) {
             printf("[receiver] recv FIN\n");
         }
         else {
             printf("[receiver] recv %d\n", recv_pkt.seq_no);
-            fwrite(recv_pkt.content, 1, recv_pkt.len, fp);
+            fwrite(recv_pkt.content, recv_pkt.len, 1, fp);
         }
         
         ack_pkt.seq_no = recv_pkt.seq_no;
@@ -72,9 +73,15 @@ int main(int argc, char* argv[]) {
         ack_pkt.to_port_no = recv_pkt.from_port_no;
         ack_pkt.is_ACK = 1;
         ack_pkt.is_FIN = recv_pkt.is_FIN;
-        sendto(sockfd, &ack_pkt, sizeof(ack_pkt), 0, (struct sockaddr*)&agent, addr_size);
-
-        if (recv_pkt.is_FIN == 1) break;
+        sendto(sockfd, &ack_pkt, sizeof(ack_pkt), 0,\
+            (struct sockaddr*)&agent, addr_size);
+        
+        if (recv_pkt.is_FIN == 1) {
+            printf("[receiver] send FIN_ACK\n");
+            break;
+        }
+        else
+            printf("[receiver] send ACK %d\n", ack_pkt.seq_no);
     }
 
     fclose(fp);
