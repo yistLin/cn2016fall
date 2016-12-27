@@ -5,17 +5,19 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <time.h>
 
 #include "packet.h"
 
 int main(int argc, char* argv[]) {
-    if (argc != 2) {
-        fprintf(stderr, "usage: ./agent [port]\n");
+    if (argc != 3) {
+        fprintf(stderr, "usage: ./agent [port] [loss rate]\n");
         exit(1);
     }
 
     int sockfd, ret;
     int my_port_no = atoi(argv[1]);
+    float loss_rate = atof(argv[2]);
     struct sockaddr_in agent;
 
     // Create UDP socket
@@ -41,10 +43,12 @@ int main(int argc, char* argv[]) {
     }
 
     // Initialize size variable to be used later on
-    // char buffer[1024];
     struct sockaddr_in sender;
     socklen_t sendsize = sizeof(sender);
     memset((char*)&sender, 0, sizeof(sender));
+
+    // setup random drop
+    srand(time(NULL));
 
     // receive a packet from sender
     packet pkt;
@@ -53,6 +57,13 @@ int main(int argc, char* argv[]) {
         recvfrom(sockfd, &pkt, sizeof(pkt), 0, (struct sockaddr*)&sender, &sendsize);
 
         printf("[agent] fwd %d to %d\n", pkt.from_port_no, pkt.to_port_no);
+
+        if (pkt.is_ACK == 0 && pkt.is_FIN == 0) {
+            if ( (float)(rand() % 10000)/10000.0 < loss_rate ) {
+                printf("[agent] drop\n");
+                continue;
+            }
+        }
 
         sender.sin_family = AF_INET;
         sender.sin_port = htons(pkt.to_port_no);

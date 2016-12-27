@@ -51,23 +51,38 @@ int main(int argc, char* argv[]) {
     // Initialize size variable to be used later on
     struct sockaddr_in agent;
     socklen_t addr_size = sizeof(agent);
-
     packet recv_pkt, ack_pkt;
     memset(&recv_pkt, 0, sizeof(packet));
     memset(&ack_pkt, 0, sizeof(packet));
 
+    // transfer configuration
+    int SEQ_NO = 1;
+
     while (1) {
+        // receive packet
         recvfrom(sockfd, &recv_pkt, sizeof(packet), 0,\
             (struct sockaddr*)&agent, &addr_size);
-
-        if (recv_pkt.is_FIN == 1) {
-            printf("[receiver] recv FIN\n");
+        
+        // receive out of order packet
+        if (recv_pkt.seq_no != SEQ_NO && recv_pkt.is_FIN == 0) {
+            printf("[receiver] send\tack\t#%d\n", ack_pkt.seq_no);
+            sendto(sockfd, &ack_pkt, sizeof(ack_pkt), 0,\
+                (struct sockaddr*)&agent, addr_size);
+            continue;
         }
+
+        // increase sequence number
+        SEQ_NO++;
+
+        // write data
+        if (recv_pkt.is_FIN)
+            printf("[receiver] recv\tfin\n");
         else {
-            printf("[receiver] recv %d\n", recv_pkt.seq_no);
+            printf("[receiver] recv\tdata\t#%d\n", recv_pkt.seq_no);
             fwrite(recv_pkt.content, recv_pkt.len, 1, fp);
         }
-        
+
+        // send ACK back
         ack_pkt.seq_no = recv_pkt.seq_no;
         ack_pkt.from_port_no = port_no;
         ack_pkt.to_port_no = recv_pkt.from_port_no;
@@ -76,12 +91,13 @@ int main(int argc, char* argv[]) {
         sendto(sockfd, &ack_pkt, sizeof(ack_pkt), 0,\
             (struct sockaddr*)&agent, addr_size);
         
-        if (recv_pkt.is_FIN == 1) {
-            printf("[receiver] send FIN_ACK\n");
+        // logging
+        if (recv_pkt.is_FIN) {
+            printf("[receiver] send\tfinack\n");
             break;
         }
         else
-            printf("[receiver] send ACK %d\n", ack_pkt.seq_no);
+            printf("[receiver] send\tack\t#%d\n", ack_pkt.seq_no);
     }
 
     fclose(fp);

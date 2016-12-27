@@ -7,11 +7,15 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/stat.h>
+#include <errno.h>
+#include <sys/time.h>
+
 #include "packet.h"
 
 int main(int argc, char* argv[]) {
     if (argc != 5) {
-        fprintf(stderr, "usage: ./sender [my port] [agent port] [dest port] [file]\n");
+        fprintf(stderr,\
+            "usage: ./sender [my port] [agent port] [dest port] [file]\n");
         exit(1);
     }
 
@@ -40,6 +44,7 @@ int main(int argc, char* argv[]) {
     }
 
 	// Configure settings to send to agent
+    socklen_t addr_len = sizeof(agent_addr);
     memset((char*)&agent_addr, 0, sizeof(agent_addr));
 	agent_addr.sin_family = AF_INET;
 	agent_addr.sin_port = htons(agent_port_no);
@@ -88,42 +93,70 @@ int main(int argc, char* argv[]) {
     int ALL_SENT = 0;
     int SEQ_NO = 0;
     int FILE_OFFSET = 0;
-    int SEG_LEN = 32;
+    int RETRANS = 0;
+
+    // set timeout
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 500000;
+    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO,\
+        (char*)&tv, sizeof(struct timeval));   
 
 	while(1) {
         if (WAIT_FIN) {
             recvfrom(sockfd, &recv_pkt, sizeof(packet), 0,\
-                (struct sockaddr*)&agent_addr, sizeof(agent_addr));
+                (struct sockaddr*)&agent_addr, &addr_len);
             if (recv_pkt.is_ACK == 1 && recv_pkt.is_FIN == 1) {
-                printf("[sender] recv FIN_ACK\n");
+                printf("[sender] recv\tfinack\n");
                 break;
             }
         }
         else if (WAIT_ACK) {
+            // wait for ACK
             recvfrom(sockfd, &recv_pkt, sizeof(packet), 0,\
-                (struct sockaddr*)&agent_addr, sizeof(agent_addr));
+                (struct sockaddr*)&agent_addr, &addr_len);
+
+            // check timeout
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                errno = 0;
+                printf("[sender] time\tout\n");
+                WAIT_ACK = 0;
+                RETRANS = 1;
+                continue;
+            }
+
+            // receive packet
             if (recv_pkt.is_ACK == 1) {
-                printf("[sender] recv ACK %d\n", recv_pkt.seq_no);
+                printf("[sender] recv\tACK\t#%d\n", recv_pkt.seq_no);
                 WAIT_ACK = 0;
             }
         }
-        else if (ALL_SENT) {
+        else if (ALL_SENT && RETRANS == 0) {
             send_pkt.is_FIN = 1;
             ALL_SENT = 0;
             WAIT_FIN = 1;
 		    sendto(sockfd, &send_pkt, sizeof(send_pkt), 0,\
                 (struct sockaddr*)&agent_addr, sizeof(agent_addr));
-            printf("[sender] send FIN.\n");
+            printf("[sender] send\tfin\n");
         }
         else {
+            if (RETRANS) {
+                sendto(sockfd, &send_pkt, sizeof(send_pkt), 0,\
+                    (struct sockaddr*)&agent_addr, sizeof(agent_addr));
+		        printf("[sender] resnd\tdata\t#%d\n", send_pkt.seq_no);
+                WAIT_ACK = 1;
+                RETRANS = 0;
+                continue;
+            }
+
             SEQ_NO = ++cnt;
             
             send_pkt.seq_no = SEQ_NO;
             int last_size = file_size - FILE_OFFSET;
-            if (last_size > SEG_LEN) {
-                memcpy(send_pkt.content, file_arr+FILE_OFFSET, SEG_LEN);
-                send_pkt.len = SEG_LEN;
-                FILE_OFFSET += SEG_LEN;
+            if (last_size > SEG_SIZE) {
+                memcpy(send_pkt.content, file_arr+FILE_OFFSET, SEG_SIZE);
+                send_pkt.len = SEG_SIZE;
+                FILE_OFFSET += SEG_SIZE;
             }
             else {
                 memcpy(send_pkt.content, file_arr+FILE_OFFSET, last_size);
@@ -133,7 +166,7 @@ int main(int argc, char* argv[]) {
 		    
             sendto(sockfd, &send_pkt, sizeof(send_pkt), 0,\
                 (struct sockaddr*)&agent_addr, sizeof(agent_addr));
-		    printf("[sender] send seq %d.\n", send_pkt.seq_no);
+		    printf("[sender] send\tdata\t#%d\n", send_pkt.seq_no);
             WAIT_ACK = 1;
         }
 	}

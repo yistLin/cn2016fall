@@ -1,6 +1,8 @@
 #ifndef _PACKET_H
 #define _PACKET_H
 
+#define SEG_SIZE 32
+
 typedef struct {
     unsigned int to_port_no;
     unsigned int from_port_no;
