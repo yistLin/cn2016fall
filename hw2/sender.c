@@ -166,7 +166,7 @@ int main(int argc, char* argv[]) {
                 printf("[sender] time\tout,\t\tthreshold=%d\n", threshold);
             }
             else{
-                seq_base += window_size;
+                seq_base += actual_sent;
                 window_size = (window_size >= threshold) ? window_size + 1 : window_size * 2;
             }
 

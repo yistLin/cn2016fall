@@ -53,19 +53,40 @@ int main(int argc, char* argv[]) {
     // receive a packet from sender
     packet pkt;
     float rnd;
+    int pkt_cnt = 0;
+    int drop_cnt = 0;
 
     while (1) {
         recvfrom(sockfd, &pkt, sizeof(pkt), 0, (struct sockaddr*)&sender, &sendsize);
 
         if (pkt.is_ACK == 0 && pkt.is_FIN == 0) {
+            printf("[agent] get\tdata\t#%d\n", pkt.seq_no);
+            pkt_cnt++;
+            
             rnd = (float)(rand() % 100) / 100.0;
             if (rnd < loss_rate) {
-                printf("[agent] drop\n");
+                drop_cnt++;
+                printf("[agent] drop\tdata\t#%d,\tloss rate = %.4f\n", pkt.seq_no, (float)drop_cnt/(float)pkt_cnt);
                 continue;
             }
+            else {
+                printf("[agent] fwd\tdata\t#%d,\tloss rate = %.4f\n", pkt.seq_no, (float)drop_cnt/(float)pkt_cnt);
+            }
         }
-        
-        printf("[agent] fwd %d to %d\n", pkt.from_port_no, pkt.to_port_no);
+        else if (pkt.is_ACK == 1 && pkt.is_FIN == 0) {
+            printf("[agent] get\tack\t#%d\n", pkt.seq_no);
+            printf("[agent] fwd\tack\t#%d\n", pkt.seq_no);
+        }
+        else if (pkt.is_FIN == 1) {
+            if (pkt.is_ACK == 0) {
+                printf("[agent] get\tfin\n");
+                printf("[agent] fwd\tfin\n");
+            }
+            else {
+                printf("[agent] get\tfinack\n");
+                printf("[agent] fwd\tfinack\n");
+            }
+        }
 
         sender.sin_family = AF_INET;
         sender.sin_port = htons(pkt.to_port_no);
