@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall
 
-SRC = sender.c receiver.c agent.c
+SRC = sender.c receiver.c agent.c sender-mt.c
 TARGET = $(SRC:.c=)
 DEPS = packet.h
 .PHONY: all clean run
@@ -17,8 +17,8 @@ receiver: receiver.c $(DEPS)
 agent: agent.c $(DEPS)
 	$(CC) $(CFLAGS) -o agent agent.c
 
-run:
-	./sender
+sender-mt: sender-mt.c $(DEPS)
+	$(CC) $(CFLAGS) -o sender-mt sender-mt.c
 
 clean:
 	$(RM) $(TARGET)
