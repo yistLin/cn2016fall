@@ -87,7 +87,15 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "cannot allocate memory\n");
         exit(1);
     }
-    memset(ack_arr, 0, sizeof(char)*seg_total);
+    memset(ack_arr, 0, sizeof(char) * seg_total);
+
+    // Setup sent array
+    char* sent_arr = (char*)malloc(sizeof(char) * seg_total);
+    if (sent_arr == NULL) {
+        fprintf(stderr, "cannot allocate memory\n");
+        exit(1);
+    }
+    memset(sent_arr, 0, sizeof(char) * seg_total);
 
     // Sending packet to agent
     packet send_pkt, recv_pkt;
@@ -105,6 +113,7 @@ int main(int argc, char* argv[]) {
     int window_size = 1;
     int threshold = 16;
     int seq_base = 0;
+    int actual_sent = 0;
 
     // Set timeout
     struct timeval tv;
@@ -122,7 +131,7 @@ int main(int argc, char* argv[]) {
             }
         }
         else if (WAIT_ACK) {
-            for (int i = 0; i < window_size; i++) {
+            for (int i = 0; i < actual_sent; i++) {
                 recvfrom(sockfd, &recv_pkt, sizeof(packet), 0, (struct sockaddr*)&agent_addr, &addr_len);
 
                 // check timeout
@@ -142,13 +151,13 @@ int main(int argc, char* argv[]) {
             if (RETRANS) {
                 int new_base = seq_base;
                 int i;
-                for (i = 0; i < window_size; i++) {
+                for (i = 0; i < actual_sent; i++) {
                     if (ack_arr[seq_base + i] == 0) {
                         new_base = seq_base + i;
                         break;
                     }
                 }
-                for (i += 1; i < window_size; i++) {
+                for (i += 1; i < actual_sent; i++) {
                     ack_arr[seq_base + i] = 0;
                 }
                 seq_base = new_base;
@@ -174,22 +183,16 @@ int main(int argc, char* argv[]) {
             printf("[sender] send\tfin\n");
         }
         else {
-            // retransmit
-            if (RETRANS) {
-                sendto(sockfd, &send_pkt, sizeof(send_pkt), 0, (struct sockaddr*)&agent_addr, sizeof(agent_addr));
-		        printf("[sender] resnd\tdata\t#%d\n", send_pkt.seq_no);
-                WAIT_ACK = 1;
-                RETRANS = 0;
-                continue;
-            }
-
-            // shrink window size at the end
-            if ((seg_total - seq_base) < window_size)
-                window_size = seg_total - seq_base;
+            // count actual sent packet
+            actual_sent = 0;
 
             for (int i = 0; i < window_size; i++) {
                 // sequence number
                 send_pkt.seq_no = seq_base + i;
+
+                // all packets sent
+                if ((seq_base + i) == seg_total)
+                    break;
 
                 // get file content
                 int file_offset = (seq_base + i) * SEG_SIZE;
@@ -201,7 +204,12 @@ int main(int argc, char* argv[]) {
 
                 // send packet
                 sendto(sockfd, &send_pkt, sizeof(send_pkt), 0, (struct sockaddr*)&agent_addr, sizeof(agent_addr));
-		        printf("[sender] send\tdata\t#%d,\twinSize=%d\n", send_pkt.seq_no, window_size);
+                if (sent_arr[seq_base + i] == 0)
+		            printf("[sender] send\tdata\t#%d,\twinSize=%d\n", send_pkt.seq_no, window_size);
+                else
+                    printf("[sender] resnd\tdata\t#%d,\twinSize=%d\n", send_pkt.seq_no, window_size);
+                sent_arr[seq_base + i] = 1;
+                actual_sent++;
             }
 
             // wait for #window_size ACKs
@@ -211,6 +219,8 @@ int main(int argc, char* argv[]) {
 
     // Release memory
     free(file_arr);
+    free(ack_arr);
+    free(sent_arr);
 
     fclose(fp);
 
