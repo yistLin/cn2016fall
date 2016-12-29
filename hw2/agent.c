@@ -52,18 +52,20 @@ int main(int argc, char* argv[]) {
 
     // receive a packet from sender
     packet pkt;
+    float rnd;
 
     while (1) {
         recvfrom(sockfd, &pkt, sizeof(pkt), 0, (struct sockaddr*)&sender, &sendsize);
 
-        printf("[agent] fwd %d to %d\n", pkt.from_port_no, pkt.to_port_no);
-
         if (pkt.is_ACK == 0 && pkt.is_FIN == 0) {
-            if ( (float)(rand() % 10000)/10000.0 < loss_rate ) {
+            rnd = (float)(rand() % 100) / 100.0;
+            if (rnd < loss_rate) {
                 printf("[agent] drop\n");
                 continue;
             }
         }
+        
+        printf("[agent] fwd %d to %d\n", pkt.from_port_no, pkt.to_port_no);
 
         sender.sin_family = AF_INET;
         sender.sin_port = htons(pkt.to_port_no);

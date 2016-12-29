@@ -14,8 +14,7 @@
 
 int main(int argc, char* argv[]) {
     if (argc != 5) {
-        fprintf(stderr,\
-            "usage: ./sender [my port] [agent port] [dest port] [file]\n");
+        fprintf(stderr, "usage: ./sender [my port] [agent port] [dest port] [file]\n");
         exit(1);
     }
 
@@ -23,7 +22,6 @@ int main(int argc, char* argv[]) {
     int agent_port_no = atoi(argv[2]);
     int dest_port_no = atoi(argv[3]);
     char* filename = argv[4];
-
     int sockfd, nBytes, ret;
 	struct sockaddr_in agent_addr, my_addr;
 
@@ -33,11 +31,10 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
-    memset(&my_addr, 0, sizeof(my_addr));
+    // Bind socket with address struct
+    memset((char*)&my_addr, 0, sizeof(my_addr));
     my_addr.sin_family = AF_INET;
     my_addr.sin_port = htons(my_port_no);
-
-    // bind socket with address struct
     if (bind(sockfd, (struct sockaddr*)&my_addr, sizeof(my_addr)) == -1) {
         fprintf(stderr, "fail to bind port\n");
         exit(1);
@@ -53,7 +50,7 @@ int main(int argc, char* argv[]) {
 		exit(1);
 	}
 
-    // open file
+    // Open file
     FILE *fp;
     fp = fopen(filename, "rb");
     if (fp == NULL) {
@@ -61,13 +58,13 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
-    // get file size
+    // Get file size
     int fd = fileno(fp);
     struct stat buf;
     fstat(fd, &buf);
     int file_size = buf.st_size;
 
-    // read all file into an array
+    // Read all file into an array
     char* file_arr = (char*)malloc(file_size + 100);
     if (file_arr == NULL) {
         fprintf(stderr, "cannot allocate memory\n");
@@ -79,7 +76,18 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
-    // sending packet to agent
+    // Setup ACK array for data segments
+    int seg_total = file_size / SEG_SIZE;
+    if (file_size % SEG_SIZE != 0)
+        seg_total += 1;
+    char* ack_arr = (char*)malloc(sizeof(char) * seg_total);
+    if (ack_arr == NULL) {
+        fprintf(stderr, "cannot allocate memory\n");
+        exit(1);
+    }
+    memset(ack_arr, 0, sizeof(char)*seg_total);
+
+    // Sending packet to agent
     int cnt = 0;
     packet send_pkt, recv_pkt;
     memset(&send_pkt, 0, sizeof(packet));
@@ -87,7 +95,7 @@ int main(int argc, char* argv[]) {
     send_pkt.from_port_no = my_port_no;
     send_pkt.to_port_no = dest_port_no;
 
-    // transfer configuration
+    // Transfer state
     int WAIT_ACK = 0;
     int WAIT_FIN = 0;
     int ALL_SENT = 0;
@@ -95,17 +103,21 @@ int main(int argc, char* argv[]) {
     int FILE_OFFSET = 0;
     int RETRANS = 0;
 
-    // set timeout
+    // Transfer config
+    int window_size = 1;
+    int threshold = 16;
+    int seq_base = 0;
+
+    // Set timeout
     struct timeval tv;
     tv.tv_sec = 0;
-    tv.tv_usec = 500000;
-    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO,\
-        (char*)&tv, sizeof(struct timeval));   
+    tv.tv_usec = 100000;
+    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char*)&tv, sizeof(struct timeval));
 
 	while(1) {
         if (WAIT_FIN) {
-            recvfrom(sockfd, &recv_pkt, sizeof(packet), 0,\
-                (struct sockaddr*)&agent_addr, &addr_len);
+            // wait for FINACK
+            recvfrom(sockfd, &recv_pkt, sizeof(packet), 0, (struct sockaddr*)&agent_addr, &addr_len);
             if (recv_pkt.is_ACK == 1 && recv_pkt.is_FIN == 1) {
                 printf("[sender] recv\tfinack\n");
                 break;
@@ -113,15 +125,14 @@ int main(int argc, char* argv[]) {
         }
         else if (WAIT_ACK) {
             // wait for ACK
-            recvfrom(sockfd, &recv_pkt, sizeof(packet), 0,\
-                (struct sockaddr*)&agent_addr, &addr_len);
+            recvfrom(sockfd, &recv_pkt, sizeof(packet), 0, (struct sockaddr*)&agent_addr, &addr_len);
 
             // check timeout
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 errno = 0;
-                printf("[sender] time\tout\n");
                 WAIT_ACK = 0;
                 RETRANS = 1;
+                printf("[sender] time\tout\n");
                 continue;
             }
 
@@ -132,26 +143,30 @@ int main(int argc, char* argv[]) {
             }
         }
         else if (ALL_SENT && RETRANS == 0) {
-            send_pkt.is_FIN = 1;
+            // setup
             ALL_SENT = 0;
             WAIT_FIN = 1;
-		    sendto(sockfd, &send_pkt, sizeof(send_pkt), 0,\
-                (struct sockaddr*)&agent_addr, sizeof(agent_addr));
+            
+            // send packet
+            send_pkt.is_FIN = 1;
+		    sendto(sockfd, &send_pkt, sizeof(send_pkt), 0, (struct sockaddr*)&agent_addr, sizeof(agent_addr));
             printf("[sender] send\tfin\n");
         }
         else {
+            // retransmit
             if (RETRANS) {
-                sendto(sockfd, &send_pkt, sizeof(send_pkt), 0,\
-                    (struct sockaddr*)&agent_addr, sizeof(agent_addr));
+                sendto(sockfd, &send_pkt, sizeof(send_pkt), 0, (struct sockaddr*)&agent_addr, sizeof(agent_addr));
 		        printf("[sender] resnd\tdata\t#%d\n", send_pkt.seq_no);
                 WAIT_ACK = 1;
                 RETRANS = 0;
                 continue;
             }
 
+            // sequence number
             SEQ_NO = ++cnt;
-            
             send_pkt.seq_no = SEQ_NO;
+
+            // get file content
             int last_size = file_size - FILE_OFFSET;
             if (last_size > SEG_SIZE) {
                 memcpy(send_pkt.content, file_arr+FILE_OFFSET, SEG_SIZE);
@@ -163,13 +178,16 @@ int main(int argc, char* argv[]) {
                 send_pkt.len = last_size;
                 ALL_SENT = 1;
             }
-		    
-            sendto(sockfd, &send_pkt, sizeof(send_pkt), 0,\
-                (struct sockaddr*)&agent_addr, sizeof(agent_addr));
+
+            // send packet
+            sendto(sockfd, &send_pkt, sizeof(send_pkt), 0, (struct sockaddr*)&agent_addr, sizeof(agent_addr));
 		    printf("[sender] send\tdata\t#%d\n", send_pkt.seq_no);
             WAIT_ACK = 1;
         }
 	}
+
+    // Release memory
+    free(file_arr);
 
     fclose(fp);
 
