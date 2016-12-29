@@ -118,7 +118,7 @@ int main(int argc, char* argv[]) {
     // Set timeout
     struct timeval tv;
     tv.tv_sec = 0;
-    tv.tv_usec = 500000;
+    tv.tv_usec = 100000;
     setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char*)&tv, sizeof(struct timeval));
 
 	while(1) {
@@ -156,9 +156,6 @@ int main(int argc, char* argv[]) {
                         new_base = seq_base + i;
                         break;
                     }
-                }
-                for (i += 1; i < actual_sent; i++) {
-                    ack_arr[seq_base + i] = 0;
                 }
                 seq_base = new_base;
                 threshold = MAX(window_size/2, 1);
