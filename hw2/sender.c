@@ -12,6 +12,8 @@
 
 #include "packet.h"
 
+#define MAX(X,Y) (((X) > (Y)) ? (X) : (Y))
+
 int main(int argc, char* argv[]) {
     if (argc != 5) {
         fprintf(stderr, "usage: ./sender [my port] [agent port] [dest port] [file]\n");
@@ -88,7 +90,6 @@ int main(int argc, char* argv[]) {
     memset(ack_arr, 0, sizeof(char)*seg_total);
 
     // Sending packet to agent
-    int cnt = 0;
     packet send_pkt, recv_pkt;
     memset(&send_pkt, 0, sizeof(packet));
     memset(&recv_pkt, 0, sizeof(packet));
@@ -98,9 +99,6 @@ int main(int argc, char* argv[]) {
     // Transfer state
     int WAIT_ACK = 0;
     int WAIT_FIN = 0;
-    int ALL_SENT = 0;
-    int SEQ_NO = 0;
-    int FILE_OFFSET = 0;
     int RETRANS = 0;
 
     // Transfer config
@@ -111,7 +109,7 @@ int main(int argc, char* argv[]) {
     // Set timeout
     struct timeval tv;
     tv.tv_sec = 0;
-    tv.tv_usec = 100000;
+    tv.tv_usec = 500000;
     setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char*)&tv, sizeof(struct timeval));
 
 	while(1) {
@@ -124,27 +122,50 @@ int main(int argc, char* argv[]) {
             }
         }
         else if (WAIT_ACK) {
-            // wait for ACK
-            recvfrom(sockfd, &recv_pkt, sizeof(packet), 0, (struct sockaddr*)&agent_addr, &addr_len);
+            for (int i = 0; i < window_size; i++) {
+                recvfrom(sockfd, &recv_pkt, sizeof(packet), 0, (struct sockaddr*)&agent_addr, &addr_len);
 
-            // check timeout
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                errno = 0;
-                WAIT_ACK = 0;
-                RETRANS = 1;
-                printf("[sender] time\tout\n");
-                continue;
+                // check timeout
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    errno = 0;
+                    RETRANS = 1;
+                    break;
+                }
+
+                // receive packet
+                if (recv_pkt.is_ACK == 1) {
+                    ack_arr[recv_pkt.seq_no] = 1;
+                    printf("[sender] recv\tACK\t#%d\n", recv_pkt.seq_no);
+                }
             }
 
-            // receive packet
-            if (recv_pkt.is_ACK == 1) {
-                printf("[sender] recv\tACK\t#%d\n", recv_pkt.seq_no);
-                WAIT_ACK = 0;
+            if (RETRANS) {
+                int new_base = seq_base;
+                int i;
+                for (i = 0; i < window_size; i++) {
+                    if (ack_arr[seq_base + i] == 0) {
+                        new_base = seq_base + i;
+                        break;
+                    }
+                }
+                for (i += 1; i < window_size; i++) {
+                    ack_arr[seq_base + i] = 0;
+                }
+                seq_base = new_base;
+                threshold = MAX(window_size/2, 1);
+                window_size = 1;
+                printf("[sender] time\tout,\t\tthreshold=%d\n", threshold);
             }
+            else{
+                seq_base += window_size;
+                window_size = (window_size >= threshold) ? window_size + 1 : window_size * 2;
+            }
+
+            RETRANS = 0;
+            WAIT_ACK = 0;
         }
-        else if (ALL_SENT && RETRANS == 0) {
+        else if (seq_base == seg_total) {
             // setup
-            ALL_SENT = 0;
             WAIT_FIN = 1;
             
             // send packet
@@ -162,26 +183,28 @@ int main(int argc, char* argv[]) {
                 continue;
             }
 
-            // sequence number
-            SEQ_NO = ++cnt;
-            send_pkt.seq_no = SEQ_NO;
+            // shrink window size at the end
+            if ((seg_total - seq_base) < window_size)
+                window_size = seg_total - seq_base;
 
-            // get file content
-            int last_size = file_size - FILE_OFFSET;
-            if (last_size > SEG_SIZE) {
-                memcpy(send_pkt.content, file_arr+FILE_OFFSET, SEG_SIZE);
-                send_pkt.len = SEG_SIZE;
-                FILE_OFFSET += SEG_SIZE;
-            }
-            else {
-                memcpy(send_pkt.content, file_arr+FILE_OFFSET, last_size);
-                send_pkt.len = last_size;
-                ALL_SENT = 1;
+            for (int i = 0; i < window_size; i++) {
+                // sequence number
+                send_pkt.seq_no = seq_base + i;
+
+                // get file content
+                int file_offset = (seq_base + i) * SEG_SIZE;
+                int send_size = file_size - file_offset;
+                if (send_size >= SEG_SIZE)
+                    send_size = SEG_SIZE;
+                memcpy(send_pkt.content, file_arr+file_offset, send_size);
+                send_pkt.len = send_size;
+
+                // send packet
+                sendto(sockfd, &send_pkt, sizeof(send_pkt), 0, (struct sockaddr*)&agent_addr, sizeof(agent_addr));
+		        printf("[sender] send\tdata\t#%d,\twinSize=%d\n", send_pkt.seq_no, window_size);
             }
 
-            // send packet
-            sendto(sockfd, &send_pkt, sizeof(send_pkt), 0, (struct sockaddr*)&agent_addr, sizeof(agent_addr));
-		    printf("[sender] send\tdata\t#%d\n", send_pkt.seq_no);
+            // wait for #window_size ACKs
             WAIT_ACK = 1;
         }
 	}

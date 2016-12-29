@@ -56,7 +56,7 @@ int main(int argc, char* argv[]) {
     memset(&ack_pkt, 0, sizeof(packet));
 
     // transfer configuration
-    int SEQ_NO = 1;
+    int SEQ_NO = 0;
 
     while (1) {
         // receive packet
