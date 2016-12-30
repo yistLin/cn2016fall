@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 
 #include "packet.h"
 
@@ -13,13 +14,14 @@ void error(char* msg) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc != 3) {
-        fprintf(stderr, "usage: ./my_addr [port] [file]\n");
+    if (argc != 4) {
+        fprintf(stderr, "usage: ./my_addr [address] [port] [file]\n");
         exit(1);
     }
 
-    int port_no = atoi(argv[1]);
-    char* filename = argv[2];
+    char* ip_address = argv[1];
+    int port_no = atoi(argv[2]);
+    char* filename = argv[3];
     int sockfd;
     struct sockaddr_in my_addr;
 
@@ -31,11 +33,10 @@ int main(int argc, char* argv[]) {
     memset((char*)&my_addr, 0, sizeof(my_addr));
     my_addr.sin_family = AF_INET;
     my_addr.sin_port = htons(port_no);
-    my_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-
-    // bind socket with address struct
     if (bind(sockfd, (struct sockaddr*)&my_addr, sizeof(my_addr)) == -1)
         error("fail to bind port");
+    if (inet_pton(AF_INET, ip_address, &my_addr.sin_addr) <= 0)
+        error("inet_pton error");
 
     // write to file
     FILE* fp;
@@ -74,6 +75,12 @@ int main(int argc, char* argv[]) {
 
         seq_no = recv_pkt.seq_no;
 
+        ack_pkt.seq_no = seq_no;
+        ack_pkt.from_port_no = port_no;
+        ack_pkt.to_port_no = recv_pkt.from_port_no;
+        strcpy(ack_pkt.from_address, ip_address);
+        strcpy(ack_pkt.to_address, recv_pkt.from_address);
+
         if (recv_pkt.is_FIN == 0) {
             if (seq_no >= seq_base && seq_no < seq_base + BUF_SIZE) {
                 // check if packet is received
@@ -91,9 +98,6 @@ int main(int argc, char* argv[]) {
                 }
                 
                 // send ACK back
-                ack_pkt.seq_no = seq_no;
-                ack_pkt.from_port_no = port_no;
-                ack_pkt.to_port_no = recv_pkt.from_port_no;
                 ack_pkt.is_ACK = 1;
                 ack_pkt.is_FIN = 0;
                 sendto(sockfd, &ack_pkt, sizeof(ack_pkt), 0, (struct sockaddr*)&agent, addr_size);

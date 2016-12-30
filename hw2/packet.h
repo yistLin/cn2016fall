@@ -8,6 +8,9 @@ typedef struct {
     unsigned int to_port_no;
     unsigned int from_port_no;
 
+    char from_address[32];
+    char to_address[32];
+
     unsigned int seq_no;
     unsigned int len;
     char content[SEG_SIZE];

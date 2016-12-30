@@ -10,14 +10,15 @@
 #include "packet.h"
 
 int main(int argc, char* argv[]) {
-    if (argc != 3) {
-        fprintf(stderr, "usage: ./agent [port] [loss rate]\n");
+    if (argc != 4) {
+        fprintf(stderr, "usage: ./agent [address] [port] [loss rate]\n");
         exit(1);
     }
 
-    int sockfd, ret;
-    int my_port_no = atoi(argv[1]);
-    float loss_rate = atof(argv[2]);
+    int sockfd;
+    char* my_address = argv[1];
+    int my_port_no = atoi(argv[2]);
+    float loss_rate = atof(argv[3]);
     struct sockaddr_in agent;
 
     // Create UDP socket
@@ -30,13 +31,10 @@ int main(int argc, char* argv[]) {
     memset((char*)&agent, 0, sizeof(agent));
     agent.sin_family = AF_INET;
     agent.sin_port = htons(my_port_no);
-
-	if ((ret = inet_pton(AF_INET, "127.0.0.1", &agent.sin_addr)) <= 0) {
-		fprintf(stderr, "inet_pton() error, ret = %d\n", ret);
+	if (inet_pton(AF_INET, my_address, &agent.sin_addr) <= 0) {
+		fprintf(stderr, "inet_pton() error\n");
 		exit(1);
 	}
-
-    // bind socket with address struct
     if (bind(sockfd, (struct sockaddr*)&agent, sizeof(agent)) == -1) {
         fprintf(stderr, "fail to bind port\n");
         exit(1);
@@ -90,6 +88,10 @@ int main(int argc, char* argv[]) {
 
         sender.sin_family = AF_INET;
         sender.sin_port = htons(pkt.to_port_no);
+        if (inet_pton(AF_INET, pkt.to_address, &sender.sin_addr) <= 0) {
+            fprintf(stderr, "inet_pton() fail in while loop\n");
+            exit(1);
+        }
 
         sendto(sockfd, &pkt, sizeof(pkt), 0, (struct sockaddr*)&sender, sendsize);
     }

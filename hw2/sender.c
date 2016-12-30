@@ -15,16 +15,19 @@
 #define MAX(X,Y) (((X) > (Y)) ? (X) : (Y))
 
 int main(int argc, char* argv[]) {
-    if (argc != 5) {
-        fprintf(stderr, "usage: ./sender [my port] [agent port] [dest port] [file]\n");
+    if (argc != 8) {
+        fprintf(stderr, "usage: ./sender [my address] [my port] [agent address] [agent port] [dest address] [dest port] [file]\n");
         exit(1);
     }
 
-    int my_port_no = atoi(argv[1]);
-    int agent_port_no = atoi(argv[2]);
-    int dest_port_no = atoi(argv[3]);
-    char* filename = argv[4];
-    int sockfd, nBytes, ret;
+    char* my_address = argv[1];
+    int my_port_no = atoi(argv[2]);
+    char* agent_address = argv[3];
+    int agent_port_no = atoi(argv[4]);
+    char* dest_address = argv[5];
+    int dest_port_no = atoi(argv[6]);
+    char* filename = argv[7];
+    int sockfd, nBytes;
 	struct sockaddr_in agent_addr, my_addr;
 
 	// Create UDP socket
@@ -37,6 +40,10 @@ int main(int argc, char* argv[]) {
     memset((char*)&my_addr, 0, sizeof(my_addr));
     my_addr.sin_family = AF_INET;
     my_addr.sin_port = htons(my_port_no);
+    if (inet_pton(AF_INET, my_address, &my_addr.sin_addr) <= 0) {
+        fprintf(stderr, "inet_pton error\n");
+        exit(1);
+    }
     if (bind(sockfd, (struct sockaddr*)&my_addr, sizeof(my_addr)) == -1) {
         fprintf(stderr, "fail to bind port\n");
         exit(1);
@@ -47,8 +54,8 @@ int main(int argc, char* argv[]) {
     memset((char*)&agent_addr, 0, sizeof(agent_addr));
 	agent_addr.sin_family = AF_INET;
 	agent_addr.sin_port = htons(agent_port_no);
-	if ((ret = inet_pton(AF_INET, "127.0.0.1", &agent_addr.sin_addr)) <= 0) {
-		fprintf(stderr, "inet_pton() error, ret = %d\n", ret);
+	if (inet_pton(AF_INET, agent_address, &agent_addr.sin_addr) <= 0) {
+		fprintf(stderr, "inet_pton() error\n");
 		exit(1);
 	}
 
@@ -103,6 +110,8 @@ int main(int argc, char* argv[]) {
     memset(&recv_pkt, 0, sizeof(packet));
     send_pkt.from_port_no = my_port_no;
     send_pkt.to_port_no = dest_port_no;
+    strcpy(send_pkt.from_address, my_address);
+    strcpy(send_pkt.to_address, dest_address);
 
     // Transfer state
     int WAIT_ACK = 0;
