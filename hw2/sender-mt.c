@@ -16,26 +16,34 @@
 #define MAX(X,Y) (((X) > (Y)) ? (X) : (Y))
 
 int main(int argc, char* argv[]) {
-    if (argc < 5) {
-        fprintf(stderr, "usage: ./sender [my port] [agent port] [more agent...(optional)] [dest port] [file]\n");
+    if (argc < 8) {
+        fprintf(stderr, "usage: ./sender [my address] [my port] [agent address] [agent port] [dest address] [dest port] [file]\n");
         exit(1);
     }
 
-    int my_port_no = atoi(argv[1]);
-    int total_agent = argc - 4;
+    char* my_address = argv[1];
+    int my_port_no = atoi(argv[2]);
+    int total_agent = (argc - 6) / 2;
     int* agent_port_arr = (int*)malloc(sizeof(int) * total_agent);
     if (agent_port_arr == NULL) {
         fprintf(stderr, "cannot allocate memory\n");
         exit(1);
     }
+    char** agent_address_arr = (char**)malloc(sizeof(char*) * total_agent);
+    if (agent_address_arr == NULL) {
+        fprintf(stderr, "cannot allocate memory\n");
+        exit(1);
+    }
     for (int i = 0; i < total_agent; i++) {
-        agent_port_arr[i] = atoi(argv[2+i]);
-        printf("agent_port_arr[%d] = %d\n", i, agent_port_arr[i]);
+        agent_port_arr[i] = atoi(argv[3 + 2*i + 1]);
+        agent_address_arr[i] = argv[3 + 2*i];
+        printf("agent #%d: %s:%d\n", i, agent_address_arr[i], agent_port_arr[i]);
     }
     srand(time(NULL));
+    char* dest_address = argv[argc-3];
     int dest_port_no = atoi(argv[argc-2]);
     char* filename = argv[argc-1];
-    int sockfd, nBytes, ret;
+    int sockfd, nBytes;
 	struct sockaddr_in agent_addr, my_addr;
 
 	// Create UDP socket
@@ -48,6 +56,10 @@ int main(int argc, char* argv[]) {
     memset((char*)&my_addr, 0, sizeof(my_addr));
     my_addr.sin_family = AF_INET;
     my_addr.sin_port = htons(my_port_no);
+    if (inet_pton(AF_INET, my_address, &my_addr.sin_addr) <= 0) {
+        fprintf(stderr, "inet_pton error\n");
+        exit(1);
+    }
     if (bind(sockfd, (struct sockaddr*)&my_addr, sizeof(my_addr)) == -1) {
         fprintf(stderr, "fail to bind port\n");
         exit(1);
@@ -58,8 +70,8 @@ int main(int argc, char* argv[]) {
     memset((char*)&agent_addr, 0, sizeof(agent_addr));
 	agent_addr.sin_family = AF_INET;
 	agent_addr.sin_port = htons(agent_port_arr[0]);
-	if ((ret = inet_pton(AF_INET, "127.0.0.1", &agent_addr.sin_addr)) <= 0) {
-		fprintf(stderr, "inet_pton() error, ret = %d\n", ret);
+	if (inet_pton(AF_INET, agent_address_arr[0], &agent_addr.sin_addr) <= 0) {
+		fprintf(stderr, "inet_pton() error\n");
 		exit(1);
 	}
 
@@ -114,6 +126,8 @@ int main(int argc, char* argv[]) {
     memset(&recv_pkt, 0, sizeof(packet));
     send_pkt.from_port_no = my_port_no;
     send_pkt.to_port_no = dest_port_no;
+    strcpy(send_pkt.from_address, my_address);
+    strcpy(send_pkt.to_address, dest_address);
 
     // Transfer state
     int WAIT_ACK = 0;
@@ -211,7 +225,12 @@ int main(int argc, char* argv[]) {
                 send_pkt.len = send_size;
 
                 // send packet
-                agent_addr.sin_port = htons(agent_port_arr[rand() % total_agent]);
+                int to_agent = rand() % total_agent;
+                agent_addr.sin_port = htons(agent_port_arr[to_agent]);
+                if (inet_pton(AF_INET, agent_address_arr[to_agent], &agent_addr.sin_addr) <= 0) {
+                    fprintf(stderr, "inet_pton error in while\n");
+                    exit(1);
+                }
                 sendto(sockfd, &send_pkt, sizeof(send_pkt), 0, (struct sockaddr*)&agent_addr, sizeof(agent_addr));
                 if (sent_arr[seq_base + i] == 0)
 		            printf("[sender] send\tdata\t#%d,\twinSize = %d\n", send_pkt.seq_no, window_size);
@@ -228,6 +247,7 @@ int main(int argc, char* argv[]) {
 
     // Release memory
     free(agent_port_arr);
+    free(agent_address_arr);
     free(file_arr);
     free(ack_arr);
     free(sent_arr);
