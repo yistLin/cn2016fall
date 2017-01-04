@@ -169,7 +169,7 @@ int main(int argc, char* argv[]) {
                 // receive packet
                 if (recv_pkt.is_ACK == 1) {
                     ack_arr[recv_pkt.seq_no] = 1;
-                    printf("[sender] recv\tACK\t#%d\n", recv_pkt.seq_no);
+                    printf("[sender] recv\tack\t#%d\n", recv_pkt.seq_no);
                 }
             }
 
