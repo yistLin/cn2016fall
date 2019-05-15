@@ -1,0 +1,119 @@
+% report.tex
+% a report of the homework 1 - Computer Network 2016 Fall
+
+\documentclass[14pt,a4paper]{extarticle}
+\usepackage[margin=2.54cm]{geometry}
+\usepackage{xeCJK}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+
+\setCJKmainfont{cwTeXFangSong}
+
+\usepackage{color}
+\usepackage{listings}
+\lstset{ %
+language=Python,                % choose the language of the code
+basicstyle=\footnotesize,       % the size of the fonts that are used for the code
+numbers=left,                   % where to put the line-numbers
+numberstyle=\footnotesize,      % the size of the fonts that are used for the line-numbers
+stepnumber=1,                   % the step between two line-numbers. If it is 1 each line will be numbered
+numbersep=5pt,                  % how far the line-numbers are from the code
+backgroundcolor=\color{white},  % choose the background color. You must add \usepackage{color}
+showspaces=false,               % show spaces adding particular underscores
+showstringspaces=false,         % underline spaces within strings
+showtabs=false,                 % show tabs within strings adding particular underscores
+frame=single,           % adds a frame around the code
+tabsize=2,          % sets default tabsize to 2 spaces
+captionpos=b,           % sets the caption-position to bottom
+breaklines=true,        % sets automatic line breaking
+breakatwhitespace=false,    % sets if automatic breaks should only happen at whitespace
+escapeinside={\%*}{*)}          % if you want to add a comment within your code
+}
+
+\title{Computer Network\\ Homework 1 Report}
+\author{林義聖\\ B03902048}
+\date{\today}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\small{\jobname.pdf}}
+\rhead{\small{Computer Network 2016 Fall}}
+\cfoot{\small{\thepage\ of \pageref{LastPage}}}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{fancy}
+
+\section*{Introduction}
+
+Our goal is to create an \textbf{IRC Robot}. The programming language I chose to do this job is \textit{Python}. There are some needed files to run the program:
+\begin{itemize}
+	\item \texttt{main} --- a executable bash script
+	\item \texttt{config} --- config for the IRC robot
+	\item \texttt{robot.py} --- the program of robot
+\end{itemize}
+My robot is called \textit{yeast\_robot}, and I've implemented the following functions:
+\begin{itemize}
+	\item \textit{@help} --- print out help message
+	\item \textit{@repeat} --- repeat sentence
+	\item \textit{@cal} --- simple calculator implemented by myself
+	\item \textit{@play} --- play guess number game with robot
+	\item \textit{@guess} --- guess number
+	\item \textit{@weather} --- get 3-days weather forecast of the city in Taiwan
+\end{itemize}
+
+\section*{Program Structure}
+
+\begin{lstlisting}
+# import dependencies
+import requests, re
+...
+# initial settings
+server_host = 'irc.freenode.net'
+...
+# useful functions
+def setup_channel():
+...
+# connect to server
+sock.connect((server_host, server_port))
+...
+# send setup message: NICK, JOIN, ...
+send_msg('JOIN ' + channel_name + ' ' + channel_key + '\r\n')
+...
+# infinite loop to receive and process message
+while True:
+	data = sock.recv(4096)
+	if data:
+		recv_msg = data.decode('utf-8').strip('\r\n')
+
+		# lots of regular expression inside the loop
+		# server is checking the robot
+    matched = re.match(r'^PING :', recv_msg)
+    if matched is not None:
+			...
+		# someone is speaking
+    matched = re.match(r'^:(.+)!(.+) PRIVMSG #(\w+) :(.+)$', recv_msg)
+    if matched is not None:
+    	...
+    	# someone call @help
+    	match_help = re.match(r'^@help$', message)
+      if match_help is not None:
+      	...
+      # another command handler
+      ...
+\end{lstlisting}
+
+\section*{Challenge \& Solution}
+
+It's a little bit hard at first to get all the stuff I need to join an IRC channel. I've tried so many times to join correctly, but my robot was still kicked out by the channel. Finally, I found that I should setup my username for authentication by sending ''\texttt{USER ... : Hi.}'' before trying to join a channel.
+
+\section*{Reflection}
+
+I think this homework assignment is interesting and a little bit challenging. Creating a chatroom robot is a quite useful skill!
+
+\section*{How to Excute}
+
+This program is written in \textit{Python}, so you must have \texttt{python3} installed in your environment. You can just type \texttt{./main} to run the program. The executable file \textit{main} is written as a bash script in order to run \textit{robot.py} with \textit{Python 3}.
+
+\end{document}
